@@ -1,0 +1,54 @@
+provider:
+  model: gpt-4o-mini
+  api_key_env: OPENAI_API_KEY
+  temperature: 0.4
+  request_timeout: 60.0
+
+output:
+  combined: ./out/dataset.jsonl
+  rejects: ./out/dataset.rejects.jsonl
+  metadata: ./out/dataset.metadata.json
+
+groups:
+  - name: thai_readonly_sales_sql
+    type: text_to_tsql_readonly
+    language: th
+    count: 5
+    schema:
+      tables:
+        - name: dbo.Customers
+          description: Customer master table.
+          columns:
+            - name: CustomerId
+              type: INT
+              description: Primary key.
+            - name: FullName
+              type: NVARCHAR(200)
+              description: Customer full name.
+            - name: Province
+              type: NVARCHAR(100)
+              description: Province name in Thai.
+            - name: CreatedAt
+              type: DATETIME2
+              description: Signup timestamp.
+        - name: dbo.Orders
+          description: Customer orders.
+          columns:
+            - name: OrderId
+              type: BIGINT
+            - name: CustomerId
+              type: INT
+              description: Foreign key to Customers.
+            - name: TotalAmount
+              type: DECIMAL(12,2)
+            - name: OrderDate
+              type: DATE
+      rules:
+        - Always join on Customers.CustomerId = Orders.CustomerId.
+        - Prefer filtering by OrderDate.
+        - Never use ORDER BY in subqueries.
+
+  - name: thai_general_qa
+    type: thai_general_qa
+    language: th
+    count: 4

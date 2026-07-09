@@ -216,3 +216,29 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Generated datasets, configs with secrets, and runtime outputs
+out/
+datasets/
+*.jsonl
+*.jsonl.gz
+*.dataset.json
+*.rejects.jsonl
+*.metadata.json
+.env
+.env.*
+!.env.example
+config.local.yaml
+config.*.local.yaml
+secrets.yaml
+
+# Tooling caches
+.basedpyright/
+.pyright/
+.mypy_cache/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
