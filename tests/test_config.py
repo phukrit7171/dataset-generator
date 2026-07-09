@@ -8,6 +8,14 @@ import pytest
 
 from dataset_generator.config import ConfigError, load_config
 
+_ENV_OVERRIDES = ("DATASET_GENERATOR_MODEL", "OPENAI_MODEL", "OPENAI_BASE_URL")
+
+
+@pytest.fixture(autouse=True)
+def _isolate_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in _ENV_OVERRIDES:
+        monkeypatch.delenv(name, raising=False)
+
 
 def _write_config(tmp_path: Path, body: str) -> Path:
     path = tmp_path / "config.yaml"
@@ -103,3 +111,39 @@ def test_load_config_rejects_non_positive_count(tmp_path: Path) -> None:
     )
     with pytest.raises(ConfigError):
         load_config(_write_config(tmp_path, body))
+
+
+def test_load_config_honors_env_model_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATASET_GENERATOR_MODEL", "MiniMax-M3")
+    body = (
+        "provider:\n"
+        "  model: gpt-4o-mini\n"
+        "output:\n"
+        "  combined: o.jsonl\n"
+        "groups:\n"
+        "  - name: g\n"
+        "    type: thai_general_qa\n"
+        "    count: 1\n"
+    )
+    config = load_config(_write_config(tmp_path, body))
+    assert config.provider.model == "MiniMax-M3"
+
+
+def test_load_config_honors_env_base_url_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://api.minimax.io/v1")
+    body = (
+        "provider:\n"
+        "  model: m\n"
+        "output:\n"
+        "  combined: o.jsonl\n"
+        "groups:\n"
+        "  - name: g\n"
+        "    type: thai_general_qa\n"
+        "    count: 1\n"
+    )
+    config = load_config(_write_config(tmp_path, body))
+    assert config.provider.base_url == "https://api.minimax.io/v1"

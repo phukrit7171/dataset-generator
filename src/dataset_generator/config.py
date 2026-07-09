@@ -37,14 +37,24 @@ def _ensure_dict(value: Any, path: str) -> dict[str, Any]:
     return cast(dict[str, Any], value)
 
 
+def _first_env(*names: str) -> str | None:
+    for name in names:
+        value = os.environ.get(name)
+        if value:
+            return value
+    return None
+
+
 def _load_provider(raw: dict[str, Any]) -> ProviderConfig:
     api_key_env_value = raw.get("api_key_env", "OPENAI_API_KEY")
     api_key_env = api_key_env_value if isinstance(api_key_env_value, str) else "OPENAI_API_KEY"
     api_key = os.environ.get(api_key_env, "")
+    model = _first_env("DATASET_GENERATOR_MODEL", "OPENAI_MODEL") or raw.get("model")
+    base_url = _first_env("OPENAI_BASE_URL") or raw.get("base_url")
     payload = {
-        "model": raw.get("model"),
+        "model": model,
         "api_key": api_key,
-        "base_url": raw.get("base_url"),
+        "base_url": base_url,
         "temperature": raw.get("temperature", 0.7),
         "request_timeout": raw.get("request_timeout", 60.0),
     }

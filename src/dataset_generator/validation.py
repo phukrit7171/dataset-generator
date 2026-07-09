@@ -85,12 +85,25 @@ def validate_readonly_tsql(statement: str) -> None:
 
 
 def parse_model_json(payload: str) -> Any:
-    """Parse a strict JSON payload, tolerating markdown code fences."""
+    """Parse a strict JSON payload, tolerating markdown fences and `` blocks."""
     text = payload.strip()
     if text.startswith("```"):
         text = re.sub(r"^```(?:json)?", "", text, flags=re.IGNORECASE).strip()
         if text.endswith("```"):
             text = text[:-3].strip()
+    fenced = re.search(r"```(?:json)?\s*(\{.*?\}|\[.*?\])\s*```", text, flags=re.DOTALL)
+    if fenced is not None:
+        text = fenced.group(1)
+    else:
+        brace_start = text.find("{")
+        bracket_start = text.find("[")
+        candidates = [idx for idx in (brace_start, bracket_start) if idx >= 0]
+        if candidates:
+            start = min(candidates)
+            text = text[start:]
+            end = max(text.rfind("}"), text.rfind("]"))
+            if end > start:
+                text = text[: end + 1]
     try:
         return json.loads(text)
     except json.JSONDecodeError as exc:

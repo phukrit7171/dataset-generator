@@ -90,3 +90,13 @@ def test_parse_model_json_strips_fences() -> None:
 def test_parse_model_json_rejects_invalid() -> None:
     with pytest.raises(RowValidationError):
         parse_model_json("not json")
+
+
+def test_parse_model_json_extracts_embedded_json_object() -> None:
+    payload = "<think>reasoning</think>\n{\"rows\": []}"
+    assert parse_model_json(payload) == {"rows": []}
+
+
+def test_parse_model_json_extracts_embedded_fenced_object() -> None:
+    payload = "noise before\n```json\n{\"rows\": []}\n```\nnoise after"
+    assert parse_model_json(payload) == {"rows": []}

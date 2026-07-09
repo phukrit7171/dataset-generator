@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -95,3 +96,28 @@ def test_cli_rejects_missing_api_key(
     config_path = _write_config(tmp_path)
     exit_code = cli.main([str(config_path)])
     assert exit_code == 3
+
+
+def test_load_env_file_loads_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("LOAD_TEST_KEY", raising=False)
+    env_file = tmp_path / ".env"
+    env_file.write_text("LOAD_TEST_KEY=loaded-value\n# comment\n", encoding="utf-8")
+    cli._load_env_file(env_file)
+    assert os.environ["LOAD_TEST_KEY"] == "loaded-value"
+
+
+def test_load_env_file_does_not_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("KEEP_ME", "preset")
+    env_file = tmp_path / ".env"
+    env_file.write_text("KEEP_ME=from-file\n", encoding="utf-8")
+    cli._load_env_file(env_file)
+    assert os.environ["KEEP_ME"] == "preset"
+
+
+def test_load_env_file_strips_quotes(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text('QUOTED_KEY="quoted value"\n', encoding="utf-8")
+    cli._load_env_file(env_file)
+    assert os.environ["QUOTED_KEY"] == "quoted value"

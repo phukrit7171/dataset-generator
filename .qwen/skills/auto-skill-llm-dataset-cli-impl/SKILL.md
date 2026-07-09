@@ -1,8 +1,8 @@
 ---
 name: llm-dataset-cli-impl
-description: Implement a Pydantic-based LLM-dataset-generation CLI (uv/Python) end-to-end after planning approval, including strict typed models, combined ChatML JSONL output, readonly T-SQL validation, fake-llm pytest tests, and a ruff + basedpyright code gate.
+description: Implement a Pydantic-based LLM-dataset-generation CLI (uv/Python) end-to-end after planning approval, including strict typed models, combined ChatML JSONL output, readonly T-SQL validation, fake-llm pytest tests, a ruff + basedpyright code gate, and a .env loader + gitignored outputs.
 source: auto-skill
-extracted_at: '2026-07-09T13:17:33.177Z'
+extracted_at: '2026-07-09T13:38:47.253Z'
 ---
 
 # Implement the LLM-dataset CLI
@@ -161,3 +161,86 @@ If any tool blocks `uv add` or `uv run` commands due to safety classifier, stop 
 - **Mock LLM with `index error`**: provide enough fake responses for the retry loop or it will add a spurious `llm_error` rejected row.
 - **`monkeypatch.chdir(tmp_path)`** is required for tests that rely on the CLI writing relative `out.jsonl` paths.
 - **OutputConfig field names**: keep YAML-friendly names (`combined`, `rejects`, `metadata`), not the renamed `combined_path` etc., to avoid breaking the loader.
+
+## Step 11 — Secrets hygiene: .env loader, .env.example, gitignored outputs
+
+The CLI runs `OPENAI_API_KEY` etc. through the config's `api_key_env`. Ship a tiny stdlib-only `.env` loader so users don't have to `export` anything before running:
+
+- `cli.py` exposes `_load_env_file(path)` that reads `KEY=VALUE` lines, skips blanks/comments, strips a single leading/trailing `"` or `'`, and calls `os.environ.setdefault(...)` (never overwrite existing env).
+- `_load_env_files(start)` walks the config's parent directory AND the current working directory; missing files are silent.
+- Always call the loader BEFORE `load_config(...)` so the API key is in `os.environ` by the time `ProviderConfig` is built.
+- Failure message on empty API key must point the user at `.env.example`, e.g. `"export OPENAI_API_KEY=... or copy .env.example to .env and edit it"`.
+- `os.environ.setdefault(...)` returns `str | None`; assign with `_ = os.environ.setdefault(...)` to satisfy basedpyright's `reportUnusedCallResult`.
+
+Ship a tracked `.env.example` (whitelisted via `!.env.example`) plus a tracked `config.local.yaml.template` (whitelisted via `!config.local.yaml.template`) so users have a copy-pasteable starting point. The real `config.local.yaml` and `.env` must stay ignored.
+
+## Step 12 — Env-driven overrides for provider model and base_url
+
+Users may want to swap LLM provider per-session without editing YAML. Wire env overrides into `_load_provider` so `.env` can carry them:
+
+- `OPENAI_BASE_URL` (or the explicit `base_url:` in YAML) — whichever is set in `os.environ` wins. If unset, fall back to YAML; if still unset, leave `None` (OpenAI default).
+- `OPENAI_MODEL` and `DATASET_GENERATOR_MODEL` — check `DATASET_GENERATOR_MODEL` first (some gateways like MiniMax use that name), then `OPENAI_MODEL`, then fall back to YAML.
+- API key: always read from `provider.api_key_env` (default `OPENAI_API_KEY`) via `os.environ.get`, never from YAML.
+
+Helper shape:
+
+```python
+def _first_env(*names: str) -> str | None:
+    for name in names:
+        value = os.environ.get(name)
+        if value:
+            return value
+    return None
+```
+
+Keep `.env.example` documented with the supported env keys (`OPENAI_API_KEY`, `OPENAI_BASE_URL`, `DATASET_GENERATOR_MODEL`/`OPENAI_MODEL`) so users know what to set.
+
+Tests that load YAML configs must `monkeypatch.delenv("DATASET_GENERATOR_MODEL", "OPENAI_MODEL", "OPENAI_BASE_URL", raising=False)` via an autouse fixture, otherwise tests run differently depending on the user's shell environment.
+
+## Step 13 — Tolerant LLM JSON parser for thinking-style models
+
+Some gateways (e.g. MiniMax-M3) wrap their JSON output in a `` reasoning block before the actual JSON. The parser must:
+
+1. Try `json.loads(text)` directly first.
+2. On failure, look for a fenced `````json ... ````` block anywhere in the text and parse the inner content.
+3. Otherwise, slice from the first `{` or `[` to the last matching `}` or `]` and retry.
+4. Strip surrounding whitespace and BOM.
+
+Reject path remains `RowValidationError("invalid JSON: ...")` so the generator's retry/reject logic still triggers.
+
+Test cases to cover:
+- Plain JSON: `{"rows": []}` → parses.
+- Code-fenced: ```` ```json\n{"rows": []}\n``` ```` → parses.
+- Thinking-prefixed: `<think>reasoning</think>\n{"rows": []}` → parses.
+- Embedded fenced: `noise\n```json\n{"rows": []}\n```\nmore noise` → parses.
+- Truly invalid: `not json` → raises `RowValidationError`.
+
+`.gitignore` additions for this kind of CLI:
+
+```
+# Generated datasets, configs with secrets, and runtime outputs
+out/
+datasets/
+*.jsonl
+*.jsonl.gz
+*.rejects.jsonl
+*.metadata.json
+.env
+.env.*
+!.env.example
+config.local.yaml
+config.*.local.yaml
+!config.local.yaml.template
+secrets.yaml
+
+# Tooling caches
+.basedpyright/
+.pyright/
+.mypy_cache/
+```
+
+Verify with `git check-ignore -v out/dataset.jsonl .env .env.example config.local.yaml secrets.yaml datasets/foo.jsonl` that everything except `.env.example` is ignored.
+
+## Step 12 — basedpyright `os.environ.setdefault` quirk
+
+`os.environ.setdefault(key, value)` returns the value (or the pre-existing one) — basedpyright strict flags it as an unused call result. Always write `_ = os.environ.setdefault(...)`. Same applies to `dict.get` when only its side effect matters.

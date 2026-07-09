@@ -1,0 +1,37 @@
+# Tracked template. Copy to `config.local.yaml` and edit freely.
+# `config.local.yaml` is git-ignored. The CLI also auto-loads `.env` from the cwd
+# and the config's parent directory so you don't need to `export` anything.
+
+provider:
+  model: gpt-4o-mini
+  api_key_env: OPENAI_API_KEY
+  base_url: https://api.openai.com/v1  # optional; remove for the OpenAI default
+  temperature: 0.4
+  request_timeout: 60.0
+
+output:
+  combined: ./out/dataset.jsonl
+  rejects: ./out/dataset.rejects.jsonl
+  metadata: ./out/dataset.metadata.json
+
+groups:
+  - name: thai_readonly_sales_sql
+    type: text_to_tsql_readonly
+    language: th
+    count: 5
+    schema:
+      tables:
+        - name: dbo.Orders
+          description: Customer orders.
+          columns:
+            - name: OrderId
+              type: BIGINT
+            - name: TotalAmount
+              type: DECIMAL(12,2)
+            - name: OrderDate
+              type: DATE
+
+  - name: thai_general_qa
+    type: thai_general_qa
+    language: th
+    count: 4

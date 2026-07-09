@@ -230,6 +230,7 @@ datasets/
 !.env.example
 config.local.yaml
 config.*.local.yaml
+!config.local.yaml.template
 secrets.yaml
 
 # Tooling caches
